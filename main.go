@@ -27,7 +27,7 @@ func dayNight() (string, time.Duration) {
 	if n.Before(nightBegin) {
 		return "light", n.Sub(nightBegin) * (-1)
 	}
-	return "night", n.Sub(dayBegin.Add(24*time.Hour)) * (-1)
+	return "dark", n.Sub(dayBegin.Add(24*time.Hour)) * (-1)
 }
 
 func main() {
