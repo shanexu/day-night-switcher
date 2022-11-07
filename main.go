@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"log"
 	"os/exec"
 	"time"
 
@@ -13,7 +12,7 @@ import (
 func dayNightThemeSwitch(str string) {
 	cmd := exec.Command("/home/shane/bin/night-theme-switch.sh", str)
 	if err := cmd.Run(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
 }
 
@@ -33,8 +32,7 @@ func dayNight() (string, time.Duration) {
 func main() {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Failed to connect to session bus:", err)
-		os.Exit(1)
+		log.Fatalln("Failed to connect to session bus:", err)
 	}
 	defer conn.Close()
 
@@ -48,14 +46,14 @@ func main() {
 	conn.Signal(dbusChan)
 
 	eventChan := make(chan struct{}, 10)
-	fmt.Println(time.Now(), "start")
+	log.Println("start")
 
 	var timer *time.Timer
 	setTimerAndSwitchDayNight := func() {
 		variant, duration := dayNight()
-		fmt.Println(time.Now(), "switch to", variant)
+		log.Println("switch to", variant)
 		dayNightThemeSwitch(variant)
-		fmt.Println(time.Now(), "sleep", duration)
+		log.Println("sleep", duration)
 		timer = time.AfterFunc(duration, func() {
 			eventChan <- struct{}{}
 		})
@@ -69,7 +67,7 @@ func main() {
 				if len(signal.Body) == 1 {
 					prepareForSleep, ok := signal.Body[0].(bool)
 					if ok && !prepareForSleep {
-						fmt.Println(time.Now(), "wakeup")
+						log.Println("wakeup")
 						timer.Stop()
 						eventChan <- struct{}{}
 					}
