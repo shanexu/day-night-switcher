@@ -1,18 +1,18 @@
 package main
 
 import (
-	"log"
 	"os/exec"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/jinzhu/now"
+	"golang.org/x/exp/slog"
 )
 
 func dayNightThemeSwitch(str string) {
 	cmd := exec.Command("/home/shane/bin/night-theme-switch.sh", str)
 	if err := cmd.Run(); err != nil {
-		log.Println(err)
+		slog.Error("execute script failed", "err", err)
 	}
 }
 
@@ -32,13 +32,15 @@ func dayNight() (string, time.Duration) {
 func main() {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		log.Fatalln("Failed to connect to session bus:", err)
+		slog.Error("failed to connect to session bus", "err", err)
+		panic(err)
 	}
 	defer conn.Close()
 
 	if err = conn.AddMatchSignal(
 		dbus.WithMatchInterface("org.freedesktop.login1.Manager"),
 	); err != nil {
+		slog.Error("failed to add match signal", "err", err)
 		panic(err)
 	}
 
@@ -46,14 +48,14 @@ func main() {
 	conn.Signal(dbusChan)
 
 	eventChan := make(chan struct{}, 10)
-	log.Println("start")
+	slog.Info("start")
 
 	var timer *time.Timer
 	setTimerAndSwitchDayNight := func() {
 		variant, duration := dayNight()
-		log.Println("switch to", variant)
+		slog.Info("switch to", "variant", variant)
 		dayNightThemeSwitch(variant)
-		log.Println("sleep", duration)
+		slog.Info("sleep", "duration", duration)
 		timer = time.AfterFunc(duration, func() {
 			eventChan <- struct{}{}
 		})
@@ -67,7 +69,7 @@ func main() {
 				if len(signal.Body) == 1 {
 					prepareForSleep, ok := signal.Body[0].(bool)
 					if ok && !prepareForSleep {
-						log.Println("wakeup")
+						slog.Info("wakeup")
 						timer.Stop()
 						eventChan <- struct{}{}
 					}
