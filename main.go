@@ -1,11 +1,13 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/jinzhu/now"
+	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
 
@@ -16,10 +18,10 @@ func dayNightThemeSwitch(str string) {
 	}
 }
 
-func dayNight() (string, time.Duration) {
+func dayNight(dayBeginDuration, nightBeginDuration time.Duration) (string, time.Duration) {
 	n := now.New(time.Now())
-	dayBegin := n.BeginningOfDay().Add(6 * time.Hour)
-	nightBegin := n.BeginningOfDay().Add(18 * time.Hour)
+	dayBegin := n.BeginningOfDay().Add(dayBeginDuration)
+	nightBegin := n.BeginningOfDay().Add(nightBeginDuration)
 	if n.Before(dayBegin) {
 		return "dark", n.Sub(dayBegin) * (-1)
 	}
@@ -30,6 +32,36 @@ func dayNight() (string, time.Duration) {
 }
 
 func main() {
+	viper.SetConfigName("config")
+	viper.SetConfigType("toml")
+	viper.AddConfigPath("$HOME/.config/day-night-switcher")
+	configNotFoundError := &viper.ConfigFileNotFoundError{}
+	err := viper.ReadInConfig()
+	if err != nil {
+		if !errors.As(err, configNotFoundError) {
+			slog.Error("failed to read in config", "err", err)
+			panic(err)
+		}
+	}
+	viper.SetDefault("main.day_begin", "06:00:00")
+	viper.SetDefault("main.night_begin", "18:00:00")
+	dayBeginStr := viper.GetString("main.day_begin")
+	nightBeginStr := viper.GetString("main.night_begin")
+	dayBegin, err := time.Parse(time.TimeOnly, dayBeginStr)
+	if err != nil {
+		panic(err)
+	}
+	nightBegin, err := time.Parse(time.TimeOnly, nightBeginStr)
+	if err != nil {
+		panic(err)
+	}
+	if !dayBegin.Before(nightBegin) {
+		panic("dayBegin must less then nightBegin")
+	}
+
+	dayBeginDuration := now.New(dayBegin).Sub(now.New(dayBegin).BeginningOfDay())
+	nightBeginDuration := now.New(nightBegin).Sub(now.New(nightBegin).BeginningOfDay())
+
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		slog.Error("failed to connect to session bus", "err", err)
@@ -52,7 +84,7 @@ func main() {
 
 	var timer *time.Timer
 	setTimerAndSwitchDayNight := func() {
-		variant, duration := dayNight()
+		variant, duration := dayNight(dayBeginDuration, nightBeginDuration)
 		slog.Info("switch to", "variant", variant)
 		dayNightThemeSwitch(variant)
 		slog.Info("sleep", "duration", duration)
