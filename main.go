@@ -59,10 +59,10 @@ func main() {
 		}
 	}
 
-	viper.SetDefault("main.day_begin", "06:00:00")
-	viper.SetDefault("main.night_begin", "18:00:00")
-	dayBeginStr := viper.GetString("main.day_begin")
-	nightBeginStr := viper.GetString("main.night_begin")
+	viper.SetDefault("day_begin", "06:00:00")
+	viper.SetDefault("night_begin", "18:00:00")
+	dayBeginStr := viper.GetString("day_begin")
+	nightBeginStr := viper.GetString("night_begin")
 	dayBegin, err := time.Parse(time.TimeOnly, dayBeginStr)
 	if err != nil {
 		panic(err)
@@ -77,11 +77,11 @@ func main() {
 	dayBeginDuration := now.New(dayBegin).Sub(now.New(dayBegin).BeginningOfDay())
 	nightBeginDuration := now.New(nightBegin).Sub(now.New(nightBegin).BeginningOfDay())
 
-	dayAction := viper.GetStringSlice("main.day_action")
+	dayAction := viper.GetStringSlice("day_action")
 	if len(dayAction) == 0 {
 		panic("day_action must not be empty")
 	}
-	nightAction := viper.GetStringSlice("main.night_action")
+	nightAction := viper.GetStringSlice("night_action")
 	if len(nightAction) == 0 {
 		panic("night_action must not be empty")
 	}
