@@ -5,11 +5,52 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/a8m/envsubst"
 	"github.com/godbus/dbus/v5"
 	"github.com/jinzhu/now"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
+
+type Config struct {
+	DayBeginStr   string   `mapstructure:"day_begin"`
+	NightBeginStr string   `mapstructure:"night_begin"`
+	DayAction     []string `mapstructure:"day_action"`
+	NightAction   []string `mapstructure:"night_action"`
+}
+
+func expanEnv(config *Config) error {
+	var err error
+	config.DayBeginStr, err = envsubst.String(config.DayBeginStr)
+	if err != nil {
+		return err
+	}
+	config.NightBeginStr, err = envsubst.String(config.NightBeginStr)
+	if err != nil {
+		return err
+	}
+	config.DayAction, err = envSubstStringSlice(config.DayAction)
+	if err != nil {
+		return err
+	}
+	config.NightAction, err = envSubstStringSlice(config.NightAction)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func envSubstStringSlice(strs []string) ([]string, error) {
+	var result []string
+	for _, str := range strs {
+		s, err := envsubst.String(str)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, nil
+}
 
 const (
 	VariantLight = "light"
@@ -59,15 +100,22 @@ func main() {
 		}
 	}
 
-	viper.SetDefault("day_begin", "06:00:00")
-	viper.SetDefault("night_begin", "18:00:00")
-	dayBeginStr := viper.GetString("day_begin")
-	nightBeginStr := viper.GetString("night_begin")
-	dayBegin, err := time.Parse(time.TimeOnly, dayBeginStr)
+	config := &Config{
+		DayBeginStr:   "06:00:00",
+		NightBeginStr: "18:00:00",
+	}
+	if err := viper.Unmarshal(&config); err != nil {
+		panic(err)
+	}
+
+	if err := expanEnv(config); err != nil {
+		panic(err)
+	}
+	dayBegin, err := time.Parse(time.TimeOnly, config.DayBeginStr)
 	if err != nil {
 		panic(err)
 	}
-	nightBegin, err := time.Parse(time.TimeOnly, nightBeginStr)
+	nightBegin, err := time.Parse(time.TimeOnly, config.NightBeginStr)
 	if err != nil {
 		panic(err)
 	}
@@ -77,12 +125,10 @@ func main() {
 	dayBeginDuration := now.New(dayBegin).Sub(now.New(dayBegin).BeginningOfDay())
 	nightBeginDuration := now.New(nightBegin).Sub(now.New(nightBegin).BeginningOfDay())
 
-	dayAction := viper.GetStringSlice("day_action")
-	if len(dayAction) == 0 {
+	if len(config.DayAction) == 0 {
 		panic("day_action must not be empty")
 	}
-	nightAction := viper.GetStringSlice("night_action")
-	if len(nightAction) == 0 {
+	if len(config.NightAction) == 0 {
 		panic("night_action must not be empty")
 	}
 
@@ -110,7 +156,7 @@ func main() {
 	setTimerAndSwitchDayNight := func() {
 		variant, duration := dayNight(dayBeginDuration, nightBeginDuration)
 		slog.Info("switch to", "variant", variant)
-		dayNightSwitch(variant, dayAction, nightAction)
+		dayNightSwitch(variant, config.DayAction, config.NightAction)
 		slog.Info("sleep", "duration", duration)
 		timer = time.AfterFunc(duration, func() {
 			eventChan <- struct{}{}
