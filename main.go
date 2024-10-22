@@ -8,15 +8,18 @@ import (
 	"github.com/a8m/envsubst"
 	"github.com/godbus/dbus/v5"
 	"github.com/jinzhu/now"
+	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
 
 type Config struct {
-	DayBeginStr   string   `mapstructure:"day_begin"`
-	NightBeginStr string   `mapstructure:"night_begin"`
-	DayAction     []string `mapstructure:"day_action"`
-	NightAction   []string `mapstructure:"night_action"`
+	DayBeginStr     string   `mapstructure:"day_begin"`
+	NightBeginStr   string   `mapstructure:"night_begin"`
+	DayAction       []string `mapstructure:"day_action"`
+	NightAction     []string `mapstructure:"night_action"`
+	WallpaperCron   string   `mapstructure:"wallpaper_cron"`
+	WallpaperAction []string `mapstructure:"wallpaper_action"`
 }
 
 func expanEnv(config *Config) error {
@@ -34,6 +37,14 @@ func expanEnv(config *Config) error {
 		return err
 	}
 	config.NightAction, err = envSubstStringSlice(config.NightAction)
+	if err != nil {
+		return err
+	}
+	config.WallpaperCron, err = envsubst.String(config.WallpaperCron)
+	if err != nil {
+		return err
+	}
+	config.WallpaperAction, err = envSubstStringSlice(config.WallpaperAction)
 	if err != nil {
 		return err
 	}
@@ -63,15 +74,17 @@ func execAction(action []string) {
 	if err := cmd.Run(); err != nil {
 		slog.Error("execute script failed", "err", err)
 	}
+	slog.Info("after exec action", "cmd", cmd)
 }
 
-func dayNightSwitch(variant string, dayAction, nightAction []string) {
+func dayNightSwitch(variant string, dayAction, nightAction []string, wallpaperAction []string) {
 	switch variant {
 	case VariantLight:
 		execAction(dayAction)
 	case VariantDark:
 		execAction(nightAction)
 	}
+	execAction(wallpaperAction)
 }
 
 func dayNight(dayBeginDuration, nightBeginDuration time.Duration) (string, time.Duration) {
@@ -156,7 +169,7 @@ func main() {
 	setTimerAndSwitchDayNight := func() {
 		variant, duration := dayNight(dayBeginDuration, nightBeginDuration)
 		slog.Info("switch to", "variant", variant)
-		dayNightSwitch(variant, config.DayAction, config.NightAction)
+		dayNightSwitch(variant, config.DayAction, config.NightAction, config.WallpaperAction)
 		slog.Info("sleep", "duration", duration)
 		timer = time.AfterFunc(duration, func() {
 			eventChan <- struct{}{}
@@ -164,6 +177,17 @@ func main() {
 	}
 	setTimerAndSwitchDayNight()
 
+	c := cron.New()
+	_, err = c.AddFunc(config.WallpaperCron, func() {
+		if len(config.WallpaperAction) > 0 {
+			execAction(config.WallpaperAction)
+		}
+	})
+	if err != nil {
+		slog.Warn("wallpaper action cron failed", "err", err)
+	}
+	c.Start()
+	defer c.Stop()
 	for {
 		select {
 		case signal := <-dbusChan:
