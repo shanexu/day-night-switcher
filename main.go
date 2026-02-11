@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/a8m/envsubst"
-	"github.com/godbus/dbus/v5"
 	"github.com/jinzhu/now"
 	"github.com/robfig/cron/v3"
 	"github.com/spf13/viper"
@@ -69,6 +68,9 @@ const (
 )
 
 func execAction(action []string) {
+	if len(action) == 0 {
+		return
+	}
 	cmd := exec.Command(action[0], action[1:]...)
 	slog.Info("before exec action", "cmd", cmd)
 	if err := cmd.Run(); err != nil {
@@ -145,23 +147,15 @@ func main() {
 		panic("night_action must not be empty")
 	}
 
-	conn, err := dbus.ConnectSystemBus()
-	if err != nil {
-		slog.Error("failed to connect to session bus", "err", err)
+	// Create platform-specific sleep monitor
+	sleepMonitor := NewSleepMonitor()
+	if err := sleepMonitor.Start(); err != nil {
+		slog.Error("failed to start sleep monitor", "err", err)
 		panic(err)
 	}
-	defer conn.Close()
+	defer sleepMonitor.Stop()
 
-	if err = conn.AddMatchSignal(
-		dbus.WithMatchInterface("org.freedesktop.login1.Manager"),
-	); err != nil {
-		slog.Error("failed to add match signal", "err", err)
-		panic(err)
-	}
-
-	dbusChan := make(chan *dbus.Signal, 10)
-	conn.Signal(dbusChan)
-
+	// Create an event channel for both sleep monitor and regular timer events
 	eventChan := make(chan struct{}, 10)
 	slog.Info("start")
 
@@ -188,18 +182,14 @@ func main() {
 	}
 	c.Start()
 	defer c.Stop()
+
 	for {
 		select {
-		case signal := <-dbusChan:
-			if signal.Name == "org.freedesktop.login1.Manager.PrepareForSleep" {
-				if len(signal.Body) == 1 {
-					prepareForSleep, ok := signal.Body[0].(bool)
-					if ok && !prepareForSleep {
-						slog.Info("wakeup")
-						timer.Stop()
-						eventChan <- struct{}{}
-					}
-				}
+		case sleepEvent := <-sleepMonitor.Events():
+			if sleepEvent.IsWake {
+				slog.Info("wakeup detected")
+				timer.Stop()
+				eventChan <- struct{}{}
 			}
 		case <-eventChan:
 			setTimerAndSwitchDayNight()

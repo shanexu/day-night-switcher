@@ -1,3 +1,26 @@
+# Python compiled files
 *.pyc
-day-night-switcher
 
+# Build artifacts
+day-night-switcher
+day-night-switcher-linux
+day-night-switcher-darwin
+
+# VS Code
+.vscode/
+
+# Claude
+.claude/
+
+# IDE files
+*.swp
+*.swo
+*~
+
+# Go compiled binaries (when built locally)
+*.exe
+*.test
+*.out
+
+# Temporary files
+tmp/
