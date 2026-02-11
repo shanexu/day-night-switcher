@@ -59,27 +59,27 @@ cp day-night-switcher ~/bin/
 Create a configuration file at `~/.config/day-night-switcher/config.toml`:
 
 ```toml
-# Day and night begin times (24-hour format)
+# Day and night begin times (24-hour format) - optional, defaults to 06:00:00 and 18:00:00
 day_begin = '06:00:00'
 night_begin = '18:00:00'
 
-# Commands to run when switching to day/night mode
+# Commands to run when switching to day/night mode - optional
 day_action = ["$HOME/bin/night-theme-switch.sh", "light"]
 night_action = ["$HOME/bin/night-theme-switch.sh", "dark"]
 
 # Optional: Wallpaper update schedule (cron format)
-# wallpaper_cron = "@hourly"
-# wallpaper_action = ["set-wallpaper.sh"]
+wallpaper_cron = "@hourly"
+wallpaper_action = ["set-wallpaper.sh"]
 ```
 
 ### Configuration Options
 
 | Option | Description | Required |
 |--------|-------------|----------|
-| `day_begin` | Start time for day mode (HH:MM:SS) | Yes |
-| `night_begin` | Start time for night mode (HH:MM:SS) | Yes |
-| `day_action` | Command to run for day mode | Yes |
-| `night_action` | Command to run for night mode | Yes |
+| `day_begin` | Start time for day mode (HH:MM:SS) | Optional (default: 06:00:00) |
+| `night_begin` | Start time for night mode (HH:MM:SS) | Optional (default: 18:00:00) |
+| `day_action` | Command to run for day mode | Optional |
+| `night_action` | Command to run for night mode | Optional |
 | `wallpaper_cron` | Cron schedule for wallpaper updates | Optional |
 | `wallpaper_action` | Command to run for wallpaper updates | Optional |
 
@@ -231,7 +231,7 @@ GOOS=darwin GOARCH=arm64 go build -o day-night-switcher-darwin-arm64 (Apple Sili
 
 ### Empty Config File
 
-If you only specify `day_action` and `night_action`, the wallpaper features are optional and won't cause errors.
+All configuration options are optional. If no actions are specified, only time-based switching will occur without executing any commands.
 
 ### Permission Issues
 

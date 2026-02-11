@@ -140,13 +140,6 @@ func main() {
 	dayBeginDuration := now.New(dayBegin).Sub(now.New(dayBegin).BeginningOfDay())
 	nightBeginDuration := now.New(nightBegin).Sub(now.New(nightBegin).BeginningOfDay())
 
-	if len(config.DayAction) == 0 {
-		panic("day_action must not be empty")
-	}
-	if len(config.NightAction) == 0 {
-		panic("night_action must not be empty")
-	}
-
 	// Create platform-specific sleep monitor
 	sleepMonitor := NewSleepMonitor()
 	if err := sleepMonitor.Start(); err != nil {
