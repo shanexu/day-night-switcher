@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -13,12 +14,14 @@ import (
 )
 
 // darwinSleepMonitor implements SleepMonitor for macOS
-// It uses a simpler approach: periodically checks system sleep status
-// and detects wake events by monitoring for significant time jumps
+// It monitors kern.sleeptime and kern.waketime to detect sleep/wake events
 type darwinSleepMonitor struct {
 	events chan SleepEvent
 	done   chan struct{}
 	wg     sync.WaitGroup
+
+	lastSleepTime int64
+	lastWakeTime  int64
 }
 
 func newPlatformSleepMonitor() SleepMonitor {
@@ -31,6 +34,12 @@ func newPlatformSleepMonitor() SleepMonitor {
 // Start implements SleepMonitor
 func (d *darwinSleepMonitor) Start() error {
 	slog.Info("Starting macOS sleep monitor")
+
+	// Get initial sleep/wake times
+	d.lastSleepTime, _ = getSleepTime()
+	d.lastWakeTime, _ = getWakeTime()
+	slog.Info("Initial sleep/wake times", "sleep", d.lastSleepTime, "wake", d.lastWakeTime)
+
 	d.wg.Add(1)
 	go d.monitor()
 	return nil
@@ -40,18 +49,7 @@ func (d *darwinSleepMonitor) Start() error {
 func (d *darwinSleepMonitor) monitor() {
 	defer d.wg.Done()
 
-	slog.Info("macOS: Using uptime-based sleep detection")
-
-	// Get initial uptime
-	lastUptime := getUptimeSecs()
-	if lastUptime == 0 {
-		slog.Warn("Could not get initial system uptime")
-		lastUptime = 1 // Start with a default value to avoid false positives
-	}
-
-	// Track sleep state
-	wasSleeping := false
-	lastSleepTime := time.Time{}
+	slog.Info("macOS: Monitoring kern.sleeptime and kern.waketime for sleep/wake events")
 
 	for {
 		select {
@@ -59,19 +57,25 @@ func (d *darwinSleepMonitor) monitor() {
 			return
 
 		case <-time.After(5 * time.Second):
-			currentUptime := getUptimeSecs()
-			slog.Debug("uptime check", "last", lastUptime, "current", currentUptime)
-
-			if currentUptime == 0 {
-				slog.Warn("Could not get system uptime")
+			currentSleepTime, err := getSleepTime()
+			if err != nil {
+				slog.Warn("failed to get sleep time", "err", err)
 				continue
 			}
 
-			// Detect sleep: uptime goes down significantly
-			if currentUptime < lastUptime-2 {
-				slog.Info("sleep detected via uptime drop", "old", lastUptime, "new", currentUptime)
-				wasSleeping = true
-				lastSleepTime = time.Now()
+			currentWakeTime, err := getWakeTime()
+			if err != nil {
+				slog.Warn("failed to get wake time", "err", err)
+				continue
+			}
+
+			slog.Debug("sleep/wake time check", "sleep", currentSleepTime, "wake", currentWakeTime,
+				"lastSleep", d.lastSleepTime, "lastWake", d.lastWakeTime)
+
+			// Detect sleep event: kern.sleeptime has changed
+			if currentSleepTime > d.lastSleepTime {
+				slog.Info("sleep detected", "old", d.lastSleepTime, "new", currentSleepTime)
+				d.lastSleepTime = currentSleepTime
 
 				select {
 				case d.events <- SleepEvent{IsWake: false}:
@@ -81,12 +85,10 @@ func (d *darwinSleepMonitor) monitor() {
 				}
 			}
 
-			// Detect wake: time has advanced but uptime stayed same or increased
-			if wasSleeping && time.Since(lastSleepTime) > time.Duration(2)*time.Second {
-				// We're after a sleep event and time has passed
-				// This indicates the system woke up
-				slog.Info("wakeup detected", "elapsed", time.Since(lastSleepTime))
-				wasSleeping = false
+			// Detect wake event: kern.waketime has changed
+			if currentWakeTime > d.lastWakeTime {
+				slog.Info("wake detected", "old", d.lastWakeTime, "new", currentWakeTime)
+				d.lastWakeTime = currentWakeTime
 
 				select {
 				case d.events <- SleepEvent{IsWake: true}:
@@ -95,8 +97,6 @@ func (d *darwinSleepMonitor) monitor() {
 					slog.Warn("event channel full, dropping wake event")
 				}
 			}
-
-			lastUptime = currentUptime
 		}
 	}
 }
@@ -113,43 +113,47 @@ func (d *darwinSleepMonitor) Events() <-chan SleepEvent {
 	return d.events
 }
 
-// getUptimeSecs gets the system uptime in seconds using sysctl
-func getUptimeSecs() int64 {
-	// Use sysctl to get system uptime
-	// kern.boottime gives the boot time, we can calculate uptime from it
-	cmd := exec.Command("sysctl", "-n", "kern.boottime")
-	output, err := cmd.Output()
-	if err != nil {
-		slog.Warn("failed to get boot time via sysctl", "err", err)
-		return 0
-	}
+// parseSysctlTimestamp parses a sysctl timestamp output like "{ sec = 1234567, usec = 472008 }"
+func parseSysctlTimestamp(output string) (int64, error) {
+	output = strings.TrimSpace(output)
 
-	// Parse the output: { sec = 1234567, usec = 0 }
-	// We need to extract the seconds and calculate uptime
-	outputStr := strings.TrimSpace(string(output))
-
-	// Try to extract the timestamp
-	var bootSec int64
-	fields := strings.Fields(outputStr)
+	// Find sec value - handles both "sec = X" and "usec = X, sec = Y" formats
+	fields := strings.Fields(output)
 	for i, field := range fields {
 		if field == "sec" && i+2 < len(fields) {
-			// Next field should be "=", next should be the number
+			// Check if next field is "="
+			if fields[i+1] != "=" {
+				continue
+			}
+			// Next field after "=" should be the number
 			trimmedNum := strings.Trim(fields[i+2], ",")
 			if num, err := strconv.ParseInt(trimmedNum, 10, 64); err == nil {
-				bootSec = num
-				break
+				return num, nil
 			}
 		}
 	}
 
-	if bootSec == 0 {
-		slog.Warn("could not parse boot time")
-		return 0
+	return 0, fmt.Errorf("could not parse sec value from: %s", output)
+}
+
+// getSleepTime gets the last sleep time in Unix timestamp seconds
+func getSleepTime() (int64, error) {
+	cmd := exec.Command("sysctl", "-n", "kern.sleeptime")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, err
 	}
 
-	// Calculate uptime
-	currentTime := time.Now().Unix()
-	uptime := currentTime - bootSec
+	return parseSysctlTimestamp(string(output))
+}
 
-	return uptime
+// getWakeTime gets the last wake time in Unix timestamp seconds
+func getWakeTime() (int64, error) {
+	cmd := exec.Command("sysctl", "-n", "kern.waketime")
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+
+	return parseSysctlTimestamp(string(output))
 }
