@@ -6,6 +6,8 @@ require (
 	github.com/a8m/envsubst v1.4.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/jinzhu/now v1.1.5
+	github.com/prashantgupta24/mac-sleep-notifier v1.0.1
+	github.com/robfig/cron/v3 v3.0.0
 	github.com/spf13/viper v1.17.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d
 )
@@ -16,7 +18,6 @@ require (
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.0 // indirect
-	github.com/robfig/cron/v3 v3.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.3.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
