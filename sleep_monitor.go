@@ -12,6 +12,10 @@ type SleepEvent struct {
 }
 
 // NewSleepMonitor creates a platform-specific sleep monitor
-func NewSleepMonitor() SleepMonitor {
-	return newPlatformSleepMonitor()
+// useIOKit parameter is only used on macOS, it selects between polling and IOKit-based implementation
+func NewSleepMonitor(useIOKit bool) SleepMonitor {
+	return newPlatformSleepMonitor(useIOKit)
 }
+
+// isIOKitSupported is defined in platform-specific files for macOS
+// Returns false on other platforms by default

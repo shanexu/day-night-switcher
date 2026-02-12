@@ -13,7 +13,7 @@ type linuxSleepMonitor struct {
 	done   chan struct{}
 }
 
-func newPlatformSleepMonitor() SleepMonitor {
+func newPlatformSleepMonitor(useIOKit bool) SleepMonitor {
 	return &linuxSleepMonitor{
 		events: make(chan SleepEvent, 10),
 		done:   make(chan struct{}),
@@ -76,4 +76,9 @@ func (l *linuxSleepMonitor) Stop() error {
 
 func (l *linuxSleepMonitor) Events() <-chan SleepEvent {
 	return l.events
+}
+
+// isIOKitSupported is only available on macOS with iokit tag
+func isIOKitSupported() bool {
+	return false
 }

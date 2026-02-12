@@ -6,7 +6,6 @@ require (
 	github.com/a8m/envsubst v1.4.2
 	github.com/godbus/dbus/v5 v5.1.0
 	github.com/jinzhu/now v1.1.5
-	github.com/prashantgupta24/mac-sleep-notifier v1.0.1
 	github.com/robfig/cron/v3 v3.0.0
 	github.com/spf13/viper v1.17.0
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d

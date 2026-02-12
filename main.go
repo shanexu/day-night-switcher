@@ -19,6 +19,7 @@ type Config struct {
 	NightAction     []string `mapstructure:"night_action"`
 	WallpaperCron   string   `mapstructure:"wallpaper_cron"`
 	WallpaperAction []string `mapstructure:"wallpaper_action"`
+	SleepMonitor    string   `mapstructure:"sleep_monitor"`
 }
 
 func expanEnv(config *Config) error {
@@ -118,6 +119,7 @@ func main() {
 	config := &Config{
 		DayBeginStr:   "06:00:00",
 		NightBeginStr: "18:00:00",
+		SleepMonitor:  "polling", // default: polling-based
 	}
 	if err := viper.Unmarshal(&config); err != nil {
 		panic(err)
@@ -141,7 +143,20 @@ func main() {
 	nightBeginDuration := now.New(nightBegin).Sub(now.New(nightBegin).BeginningOfDay())
 
 	// Create platform-specific sleep monitor
-	sleepMonitor := NewSleepMonitor()
+	useIOKit := config.SleepMonitor == "iokit" || config.SleepMonitor == "mac-sleep-notifier" || config.SleepMonitor == "native"
+	slog.Info("Selected sleep monitor", "type", config.SleepMonitor, "useIOKit", useIOKit)
+
+	// Check for unsupported configuration
+	if useIOKit {
+		// Check if iokit implementation is available
+		if !isIOKitSupported() {
+			slog.Warn("IOKit sleep monitor requested but not available. Using polling-based monitor instead.")
+			slog.Warn("To use IOKit, rebuild with: go build -tags iokit")
+			useIOKit = false
+		}
+	}
+
+	sleepMonitor := NewSleepMonitor(useIOKit)
 	if err := sleepMonitor.Start(); err != nil {
 		slog.Error("failed to start sleep monitor", "err", err)
 		panic(err)

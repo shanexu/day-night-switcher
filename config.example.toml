@@ -1,0 +1,30 @@
+# Day/Night Switcher Configuration
+
+# Time configuration (required)
+day_begin = "06:00:00"
+night_begin = "18:00:00"
+
+# Actions to run when switching to day mode
+day_action = [
+    "/bin/echo", "Good morning, switching to light theme!"
+]
+
+# Actions to run when switching to night mode
+night_action = [
+    "/bin/echo", "Good evening, switching to dark theme!"
+]
+
+# Wallpaper action (cron expression, optional)
+wallpaper_cron = "0 9 * * *"
+wallpaper_action = ["/path/to/wallpaper-switch.sh"]
+
+# Sleep monitor configuration (optional, default: "polling")
+# Options:
+#   - "polling": Uses sysctl to poll sleep/wake status (default, works everywhere)
+#   - "native": Uses macOS IOKit for real-time notifications (requires special build)
+#
+# Note: "native" requires building with CGo:
+#   CGO_ENABLED=1 go build -tags iokit -o day-night-switcher
+#
+# For normal usage, "polling" is recommended as it's simpler and more reliable
+sleep_monitor = "polling"
