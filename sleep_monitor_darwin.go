@@ -1,4 +1,4 @@
-//go:build darwin
+//go:build darwin && !iokit
 
 package main
 
@@ -14,21 +14,20 @@ import (
 )
 
 // newPlatformSleepMonitor creates a macOS-specific sleep monitor
-// Always uses polling-based implementation (sysctl)
-// IOKit support would require CGo and is not available in default build
+// This is the polling-only version (compiled without 'iokit' tag)
 func newPlatformSleepMonitor(useIOKit bool) SleepMonitor {
 	// Note: IOKit implementation requires CGo and special build tags
-	// For now, we always use the polling-based implementation
+	// This file is compiled when iokit tag is NOT present
 	if useIOKit {
 		slog.Warn("IOKit sleep monitor requested but not available in this build.")
 		slog.Warn("Defaulting to polling-based monitor (sysctl).")
-		slog.Warn("IOKit support would require: go build -tags iokit,cgo")
+		slog.Warn("IOKit support would require: go build -tags iokit,cgo - CGO_ENABLED=1")
 	}
 	return newPollingSleepMonitor()
 }
 
 // isIOKitSupported returns true if IOKit implementation is available
-// This is always false for default builds (would be true with iokit tag)
+// This is compiled only when iokit tag is NOT present
 func isIOKitSupported() bool {
 	return false
 }
